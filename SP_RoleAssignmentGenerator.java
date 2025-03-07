@@ -7,8 +7,8 @@ import java.util.regex.Pattern;
 public class SailpointCSVParser {
 
     public static void main(String[] args) {
-        String inputFilePath = "roles_input.csv";  // Input CSV File (RoleName, Criteria)
-        String outputFilePath = "roles_output.csv"; // Output CSV File (RoleName, JSON Criteria)
+        String inputFilePath = "roles_input.csv";  // Input CSV file (RoleName, Criteria)
+        String outputFilePath = "roles_output.csv"; // Output CSV file (RoleName, JSON Criteria)
 
         try (BufferedReader br = new BufferedReader(new FileReader(inputFilePath));
              BufferedWriter bw = new BufferedWriter(new FileWriter(outputFilePath))) {
@@ -25,9 +25,12 @@ public class SailpointCSVParser {
 
                 JSONObject jsonOutput = parseComplexCondition(criteria);
                 bw.write(roleName + "," + jsonOutput.toString().replaceAll("\\s+", "") + "\n");
+
+                // Debugging Output
+                System.out.println("✅ Processed: " + roleName);
             }
 
-            System.out.println("CSV processing complete. Output written to: " + outputFilePath);
+            System.out.println("✅ CSV processing complete. Output written to: " + outputFilePath);
 
         } catch (IOException e) {
             e.printStackTrace();
@@ -60,15 +63,23 @@ public class SailpointCSVParser {
 
     private static JSONObject parseContainsCondition(String condition) {
         JSONArray children = new JSONArray();
-        Matcher matcher = Pattern.compile("\"?(.*?)\"? contains \"?([^\"]*?)\"?").matcher(condition);
+        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*contains\\s*\"?(.*?)\"?");
+        Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
             String attribute = matcher.group(1).trim();
             String[] values = matcher.group(2).split(" OR ");
 
             for (String value : values) {
-                children.put(createCriteria("attribute." + attribute, "IDENTITY", "CONTAINS", sanitizeValue(value.trim())));
+                value = sanitizeValue(value.trim());
+
+                // Debugging Output
+                System.out.println("🔍 CONTAINS Matched: Attribute = " + attribute + ", Value = " + value);
+
+                children.put(createCriteria("attribute." + attribute, "IDENTITY", "CONTAINS", value));
             }
+        } else {
+            System.out.println("❌ No match found for: " + condition);
         }
 
         JSONObject containsCondition = new JSONObject();
@@ -78,24 +89,40 @@ public class SailpointCSVParser {
     }
 
     private static JSONObject parseEqualsCondition(String condition) {
-        Matcher matcher = Pattern.compile("\"?(.*?)\"? equals \"?([^\"]*?)\"?").matcher(condition);
+        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*equals\\s*\"?(.*?)\"?");
+        Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
             String attribute = matcher.group(1).trim();
             String value = sanitizeValue(matcher.group(2).trim());
+
+            // Debugging Output
+            System.out.println("🔍 EQUALS Matched: Attribute = " + attribute + ", Value = " + value);
+
             return createCriteria("attribute." + attribute, "IDENTITY", "EQUALS", value);
+        } else {
+            System.out.println("❌ No match found for: " + condition);
         }
+
         return new JSONObject();
     }
 
     private static JSONObject parseNotEqualsCondition(String condition) {
-        Matcher matcher = Pattern.compile("\"?(.*?)\"? NOT_EQUALS \"?([^\"]*?)\"?").matcher(condition);
+        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*NOT_EQUALS\\s*\"?(.*?)\"?");
+        Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
             String attribute = matcher.group(1).trim();
             String value = sanitizeValue(matcher.group(2).trim());
+
+            // Debugging Output
+            System.out.println("🔍 NOT_EQUALS Matched: Attribute = " + attribute + ", Value = " + value);
+
             return createCriteria("attribute." + attribute, "IDENTITY", "NOT_EQUALS", value);
+        } else {
+            System.out.println("❌ No match found for: " + condition);
         }
+
         return new JSONObject();
     }
 
@@ -113,10 +140,14 @@ public class SailpointCSVParser {
     }
 
     private static String sanitizeValue(String value) {
-        // Preserve semicolons (if present)
+        // Preserve semicolon-wrapped values
         if (value.startsWith(";") && value.endsWith(";")) {
-            return value;  // Keep semicolon-wrapped values intact
+            return value;
         }
-        return value.replaceAll("^\"|\"$", ""); // Remove leading and trailing quotes (if any)
+        // Preserve numeric values
+        if (value.matches("^\\d+$")) {
+            return value;
+        }
+        return value.replaceAll("^\"|\"$", ""); // Remove leading and trailing quotes
     }
 }
