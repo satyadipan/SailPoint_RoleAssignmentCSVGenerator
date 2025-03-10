@@ -63,7 +63,7 @@ public class SailpointCSVParser {
 
     private static JSONObject parseContainsCondition(String condition) {
         JSONArray children = new JSONArray();
-        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*contains\\s*'?([^']*)'?");
+       Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*contains\\s*'?\"?([^'\"]*)\"?'?");
         Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
@@ -89,7 +89,7 @@ public class SailpointCSVParser {
     }
 
     private static JSONObject parseEqualsCondition(String condition) {
-         Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*equals\\s*'?([^']*)'?");
+        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*equals\\s*'?\"?([^'\"]*)\"?'?");
         Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
@@ -108,7 +108,7 @@ public class SailpointCSVParser {
     }
 
     private static JSONObject parseNotEqualsCondition(String condition) {
-        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*NOT_EQUALS\\s*'?([^']*)'?");
+        Pattern pattern = Pattern.compile("\"?(.*?)\"?\\s*NOT_EQUALS\\s*'?\"?([^'\"]*)\"?'?");
         Matcher matcher = pattern.matcher(condition);
 
         if (matcher.find()) {
