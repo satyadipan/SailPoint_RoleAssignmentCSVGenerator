@@ -1,0 +1,2 @@
+Role Name,Group 1 Source,Group 1 Attribute,Group 1 Operator,Group 1 Values,Group 2 Source,Group 2 Attribute,Group 2 Operator,Group 2 Values,Group 3 Source,Group 3 Attribute,Group 3 Operator,Group 3 Values,Logical Operator Between Groups
+ExampleRole1,IDENTITY,department,EQUALS,"My-Department1 OR My-Department2",IDENTITY,workerStatus,CONTAINS,ACTIVE,ACTIVEDIRECTORY,givenName,CONTAINS,Sp,"AND AND"
