@@ -1,3 +1,249 @@
+import java.io.*;
+import java.util.*;
+import java.util.regex.*;
+import java.util.stream.Collectors;
+
+public class CsvToJsonConverter {
+    
+    public static void main(String[] args) {
+        if (args.length < 2) {
+            System.out.println("Usage: java CsvToJsonConverter <input_csv_file> <output_csv_file>");
+            return;
+        }
+        
+        String inputFile = args[0];
+        String outputFile = args[1];
+        
+        try {
+            List<String[]> inputData = readCsv(inputFile);
+            List<String[]> outputData = convertData(inputData);
+            writeCsv(outputFile, outputData);
+            System.out.println("Conversion completed successfully.");
+        } catch (Exception e) {
+            System.err.println("Error during conversion: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+    
+    private static List<String[]> readCsv(String fileName) throws IOException {
+        List<String[]> data = new ArrayList<>();
+        try (BufferedReader br = new BufferedReader(new FileReader(fileName))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                // Split by comma but respect parentheses and quotes
+                String[] values = line.split(",(?=(?:[^'\"]*['\"][^'\"]*['\"])*[^'\"]*$)");
+                data.add(values);
+            }
+        }
+        return data;
+    }
+    
+    private static void writeCsv(String fileName, List<String[]> data) throws IOException {
+        try (BufferedWriter bw = new BufferedWriter(new FileWriter(fileName))) {
+            for (String[] row : data) {
+                bw.write(String.join(",", row));
+                bw.newLine();
+            }
+        }
+    }
+    
+    private static List<String[]> convertData(List<String[]> inputData) {
+        List<String[]> outputData = new ArrayList<>();
+        
+        for (String[] row : inputData) {
+            if (row.length < 2) {
+                System.err.println("Warning: Skipping row with insufficient data: " + Arrays.toString(row));
+                continue;
+            }
+            
+            String roleName = row[0];
+            String criteria = row[1];
+            
+            String jsonCriteria = convertCriteriaToJson(criteria);
+            
+            // Create output row: roleName, constant1, constant2, jsonCriteria
+            String[] outputRow = {
+                "assignUsersToRole",
+                roleName,
+                "COMPLEX_CRITERIA",
+                "\"" + jsonCriteria.replace("\"", "\"\"") + "\""  // Escape quotes for CSV
+            };
+            
+            outputData.add(outputRow);
+        }
+        
+        return outputData;
+    }
+    
+    private static String convertCriteriaToJson(String criteria) {
+        // Parse the criteria and build the JSON structure
+        CriteriaParser parser = new CriteriaParser();
+        CriteriaNode rootNode = parser.parse(criteria);
+        return rootNode.toJson();
+    }
+    
+    // Helper classes for parsing and building the JSON structure
+    
+    static class CriteriaParser {
+        
+        public CriteriaNode parse(String criteria) {
+            // Remove outer parentheses if present
+            criteria = criteria.trim();
+            if (criteria.startsWith("(") && criteria.endsWith(")")) {
+                criteria = criteria.substring(1, criteria.length() - 1);
+            }
+            
+            // Check if the criteria contains AND or OR at the top level
+            if (containsLogicalOperator(criteria)) {
+                return parseComplex(criteria);
+            } else {
+                return parseSimple(criteria);
+            }
+        }
+        
+        private boolean containsLogicalOperator(String criteria) {
+            // Check if the criteria contains AND or OR outside of any parentheses
+            int depth = 0;
+            for (int i = 0; i < criteria.length(); i++) {
+                char c = criteria.charAt(i);
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0) {
+                    if (i + 4 <= criteria.length() && criteria.substring(i, i + 4).equals(" OR ")) {
+                        return true;
+                    }
+                    if (i + 5 <= criteria.length() && criteria.substring(i, i + 5).equals(" AND ")) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+        
+        private CriteriaNode parseComplex(String criteria) {
+            List<CriteriaNode> children = new ArrayList<>();
+            String operation = null;
+            
+            // Split by top-level AND or OR
+            List<String> parts = splitByLogicalOperator(criteria);
+            
+            // Determine the operation (AND or OR)
+            if (criteria.contains(" AND ")) {
+                operation = "AND";
+            } else {
+                operation = "OR";
+            }
+            
+            // Parse each part
+            for (String part : parts) {
+                children.add(parse(part));
+            }
+            
+            return new ComplexCriteriaNode(operation, children);
+        }
+        
+        private List<String> splitByLogicalOperator(String criteria) {
+            List<String> parts = new ArrayList<>();
+            
+            int depth = 0;
+            int start = 0;
+            String currentOperator = null;
+            
+            for (int i = 0; i < criteria.length(); i++) {
+                char c = criteria.charAt(i);
+                
+                if (c == '(') depth++;
+                else if (c == ')') depth--;
+                else if (depth == 0) {
+                    if (i + 4 <= criteria.length() && criteria.substring(i, i + 4).equals(" OR ")) {
+                        if (currentOperator == null) {
+                            currentOperator = "OR";
+                        } else if (!currentOperator.equals("OR")) {
+                            throw new IllegalArgumentException("Mixed operators not supported at the same level");
+                        }
+                        parts.add(criteria.substring(start, i).trim());
+                        start = i + 4;
+                        i += 3; // Skip the operator
+                    } else if (i + 5 <= criteria.length() && criteria.substring(i, i + 5).equals(" AND ")) {
+                        if (currentOperator == null) {
+                            currentOperator = "AND";
+                        } else if (!currentOperator.equals("AND")) {
+                            throw new IllegalArgumentException("Mixed operators not supported at the same level");
+                        }
+                        parts.add(criteria.substring(start, i).trim());
+                        start = i + 5;
+                        i += 4; // Skip the operator
+                    }
+                }
+            }
+            
+            // Add the last part
+            if (start < criteria.length()) {
+                parts.add(criteria.substring(start).trim());
+            }
+            
+            return parts;
+        }
+        
+        private CriteriaNode parseSimple(String criteria) {
+            // Extract the key details, operation, and value
+            Pattern pattern = Pattern.compile("(\\w+)\\.(\\w+)(?:\\.(\\w+))?\\s+(EQUALS|CONTAINS)\\s+'([^']+)'");
+            Matcher matcher = pattern.matcher(criteria);
+            
+            if (matcher.find()) {
+                String type = matcher.group(1);
+                String property = matcher.group(2);
+                String sourceId = matcher.group(3);  // May be null
+                String operation = matcher.group(4);
+                String value = matcher.group(5);
+                
+                // Handle special case for attributes
+                if (property.equals("attribute")) {
+                    String fullProperty = "attribute." + sourceId;
+                    sourceId = null;
+                    
+                    // Check if there's a source ID in the criteria
+                    Pattern sourcePattern = Pattern.compile("'([^']+)'");
+                    Matcher sourceMatcher = sourcePattern.matcher(criteria);
+                    if (sourceMatcher.find() && sourceMatcher.find()) {  // Find the second occurrence
+                        sourceId = sourceMatcher.group(1);
+                    }
+                    
+                    return new SimpleCriteriaNode(type, fullProperty, sourceId, operation, value);
+                }
+                
+                return new SimpleCriteriaNode(type, "attribute." + property, sourceId, operation, value);
+            }
+            
+            throw new IllegalArgumentException("Invalid criteria format: " + criteria);
+        }
+    }
+    
+    static interface CriteriaNode {
+        String toJson();
+    }
+    
+    static class ComplexCriteriaNode implements CriteriaNode {
+        private String operation;
+        private List<CriteriaNode> children;
+        
+        public ComplexCriteriaNode(String operation, List<CriteriaNode> children) {
+            this.operation = operation;
+            this.children = children;
+        }
+        
+        @Override
+        public String toJson() {
+            StringBuilder json = new StringBuilder();
+            json.append("{\"children\":[");
+            
+            for (int i = 0; i < children.size(); i++) {
+                json.append(children.get(i).toJson());
+                if (i < children.size() - 1) {
+                    json.append(",");
+                }
+            }
+            
             json.append("],\"operation\":\"").append(operation).append("\"}");
             return json.toString();
         }
