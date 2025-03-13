@@ -1,0 +1,38 @@
+            json.append("],\"operation\":\"").append(operation).append("\"}");
+            return json.toString();
+        }
+    }
+    
+    static class SimpleCriteriaNode implements CriteriaNode {
+        private String type;
+        private String property;
+        private String sourceId;
+        private String operation;
+        private String value;
+        
+        public SimpleCriteriaNode(String type, String property, String sourceId, String operation, String value) {
+            this.type = type;
+            this.property = property;
+            this.sourceId = sourceId;
+            this.operation = operation;
+            this.value = value;
+        }
+        
+        @Override
+        public String toJson() {
+            StringBuilder json = new StringBuilder();
+            json.append("{\"key\":{\"property\":\"").append(property).append("\"");
+            
+            if (sourceId != null) {
+                json.append(",\"sourceId\":\"").append(sourceId).append("\"");
+            }
+            
+            json.append(",\"type\":\"").append(type).append("\"}");
+            json.append(",\"operation\":\"").append(operation).append("\"");
+            json.append(",\"").append(value.matches("\\d+") ? "value" : "stringValue").append("\":\"").append(value).append("\"");
+            json.append("}");
+            
+            return json.toString();
+        }
+    }
+}
